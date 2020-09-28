@@ -1193,10 +1193,10 @@ export default {
             this.undoTransaction()
             e.preventDefault()
             break
-          case 65: // a
-            this.toggleSelectAllRecords()
-            e.preventDefault()
-            break
+          // case 65: // a
+          //   this.toggleSelectAllRecords()
+          //   e.preventDefault()
+          //   break
           case 67: // c
             this.inputBox.value = this.currentCell.textContent
             this.inputBox.focus()
