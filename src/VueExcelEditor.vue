@@ -1,6 +1,11 @@
 <template>
   <div class="vue-excel-editor" :style="{display: 'inline-block', 'max-width': width}">
     <div class="component-content">
+      <!-- No record -->
+      <div v-if="localizedLabel.noRecordIndicator && pagingTable.length == 0" class="norecord" :style="{bottom: noFooter? '12px' : '37px'}">
+        {{ localizedLabel.noRecordIndicator }}
+      </div>
+
       <div ref="tableContent"
            class="table-content"
            :class="{'no-footer': noFooter}"
@@ -84,13 +89,22 @@
             </tr>
           </thead>
           <tbody @mousedown="mouseDown">
-            <tr v-for="(record, rowPos) in pagingTable"
+            <tr v-if="localizedLabel.noRecordIndicator && pagingTable.length == 0">
+              <td colspan="100%" style="height:40px; vertical-align: middle; text-align: center"></td>
+            </tr>
+            <tr v-else
+                v-for="(record, rowPos) in pagingTable"
                 :key="rowPos"
                 :class="{select: typeof selected[pageTop + rowPos] !== 'undefined'}"
                 :style="rowStyle(record)">
               <td class="center-text first-col"
-                  :class="{hide: noNumCol}"
+                  :id="`rid-${record.$id}`"
+                  :class="{
+                    hide: noNumCol,
+                    error: rowerr[`rid-${record.$id}`]
+                  }"
                   :pos="rowPos"
+                  @mouseover="numcolMouseOver"
                   @click="rowLabelClick">
                 <span v-html="recordLabel(pageTop + rowPos + 1, record)"></span>
               </td>
@@ -115,7 +129,7 @@
             </tr>
           </tbody>
           <tfoot>
-            <tr v-show="summaryRow">
+            <tr v-show="pagingTable.length && summaryRow">
               <td class="row-summary first-col">&nbsp;</td>
               <template v-for="(field, p) in fields">
                 <td v-show="!field.invisible"
@@ -250,7 +264,8 @@
       <input type="file"
              ref="importFile"
              accept=".xlsx, .xls, xlsm, .csv"
-             style="width:0; height: 0; opacity:0; z-index:-1"
+             style="position: absolute; top: 0; left: 0; width:0; height: 0; opacity:0; z-index:-1"
+             @keyup="componentTabInto"
              @change="doImport" />
 
       <panel-filter ref="panelFilter" :n-filter-count="nFilterCount" :localized-label="localizedLabel" />
@@ -314,12 +329,14 @@ export default {
     noFooter: {type: Boolean, default: false},
     noPaging: {type: Boolean, default: false},
     noNumCol: {type: Boolean, default: false},
+    noMouseScroll: {type: Boolean, default: false},
     page: {type: Number, default: 0},               // prefer page size, auto-cal if not provided
     enterToSouth: {type: Boolean, default: false},  // default enter to south
     nFilterCount: {type: Number, default: 1000},    // show top n values in filter dialog
     height: {type: String, default: ''},
     width: {type: String, default: '100%'},
     autocomplete: {type: Boolean, default: false},  // Default autocomplete of all columns
+    autocompleteCount: {type: Number, default: 50},
     readonly: {type: Boolean, default: false},
     readonlyStyle: {type: Object, default () {return {}}},
     remember: {type: Boolean, default: false},
@@ -329,6 +346,7 @@ export default {
     addColumn: {type: Function, default: null},
     spellcheck: {type: Boolean, default: false},
     newIfBottom: {type: Boolean, default: false},
+    validate: {type: Function, default: null},
     localizedLabel: {
       type: Object,
       default () {
@@ -366,9 +384,11 @@ export default {
           noRecordIsRead: 'No record is read',
           readonlyColumnDetected: 'Readonly column detected',
           columnHasValidationError: (name, err) => `Column ${name} has validation error: ${err}`,
+          rowHasValidationError: (row, name, err) => `Row ${row} has validation error for column ${name}: ${err}`,
           noMatchedColumnName: 'No matched column name',
           invalidInputValue: 'Invalid input value',
-          missingKeyColumn: 'Missing key column'
+          missingKeyColumn: 'Missing key column',
+          noRecordIndicator: 'No record'
         }
       }
     },
@@ -413,6 +433,7 @@ export default {
       autocompleteSelect: -1,
 
       errmsg: {},
+      rowerr: {},
       tip: '',
 
       colHash: '',
@@ -533,6 +554,12 @@ export default {
         this.frontdrop.style.height = rect.height + 'px'
         this.frontdrop.style.width = rect.width + 'px'
       }
+    },
+    pageTop (newVal) {
+      this.$emit('page-changed', newVal, newVal + this.pageSize - 1)
+    },
+    pageSize (newVal) {
+      this.$emit('page-changed', this.pageTop, this.pageTop + newVal - 1)
     }
   },
   beforeDestroy () {
@@ -541,6 +568,7 @@ export default {
     window.removeEventListener('keydown', this.winKeydown)
     window.removeEventListener('keyup', this.winKeyup)
     window.removeEventListener('scroll', this.winScroll)
+    window.removeEventListener('wheel', this.mousewheel)
   },
   mounted () {
     this.tableContent = this.$refs.tableContent
@@ -571,6 +599,7 @@ export default {
     window.addEventListener('keydown', this.winKeydown)
     window.addEventListener('keyup', this.winKeyup)
     window.addEventListener('scroll', this.winScroll)
+    window.addEventListener('wheel', this.mousewheel, {passive: false})
 
     if (this.remember) {
       const saved = localStorage[window.location.pathname + '.' + this.token]
@@ -582,6 +611,12 @@ export default {
     }
   },
   methods: {
+    componentTabInto (e) {
+      if (e.keyCode === 9) {
+        if (!this.moveInputSquare(this.currentRowPos, this.currentColPos))
+          this.moveInputSquare(0, 0)
+      }
+    },
     reset () {
       this.errmsg = {}
       this.redo = []
@@ -944,6 +979,12 @@ export default {
       if (key.length && key.join() !== '') return key
       return [rec.$id]
     },
+    getFieldByName (name) {
+      return this.fields.find(f => f.name === name)
+    },
+    getFieldByLabel (label) {
+      return this.fields.find(f => f.label === label)
+    },
 
     /* *** Customization **************************************************************************************
      */
@@ -998,12 +1039,14 @@ export default {
     /* *** Date Picker *********************************************************************************
      */
     showDatePickerDiv () {
+      if (!this.$refs.dpContainer) return
       const cellRect = this.currentCell.getBoundingClientRect()
       this.$refs.dpContainer.style.left = (cellRect.left) + 'px'
       this.$refs.dpContainer.style.top = (cellRect.bottom) + 'px'
       this.inputDateTime = this.currentCell.textContent
       this.showDatePicker = true
       this.lazy(() => {
+        if (!this.$refs.dpContainer) return
         const r = this.$refs.dpContainer.getBoundingClientRect()
         if (r.bottom > window.innerHeight)
           this.$refs.dpContainer.style.top = (cellRect.top - r.height) + 'px'
@@ -1062,7 +1105,10 @@ export default {
     vsbMouseUp () {
       window.removeEventListener('mousemove', this.vsbMouseMove)
       window.removeEventListener('mouseup', this.vsbMouseUp)
-      this.lazy(() => this.$refs.vScrollButton.classList.remove('focus'))
+      this.lazy(() => {
+        if (!this.$refs.vScrollButton) return
+        this.$refs.vScrollButton.classList.remove('focus')
+      })
       this.vScroller.mouseY = 0
       if (!this.noPaging) {
         const ratio = this.vScroller.buttonTop / (this.vScroller.height - this.vScroller.buttonHeight)
@@ -1120,7 +1166,10 @@ export default {
     sbMouseUp () {
         window.removeEventListener('mousemove', this.sbMouseMove)
         window.removeEventListener('mouseup', this.sbMouseUp)
-        this.lazy(() => this.$refs.hScroll.classList.remove('focus'))
+        this.lazy(() => {
+          if (!this.$refs.hScroll) return
+          this.$refs.hScroll.classList.remove('focus')
+        })
         this.hScroller.mouseX = 0
         this.$forceUpdate()
     },
@@ -1165,6 +1214,23 @@ export default {
     winScroll () {
       this.showDatePicker = false
       this.autocompleteInputs = []
+    },
+    mousewheel (e) {
+      if (this.noMouseScroll || !this.mousein || !e.deltaY) return
+      let adjust = 0
+      if (e.deltaY > 30 && this.pageTop + this.pageSize < this.table.length) adjust = 1
+      else if (e.deltaY < -30 && this.pageTop > 0) adjust = -1
+      if (adjust) {
+        this.pageTop += adjust
+        setTimeout(this.calVScroll)
+        if (this.$refs.vScrollButton) {
+          this.$refs.vScrollButton.classList.add('focus')
+          this.lazy(() => this.$refs.vScrollButton.classList.remove('focus'), 1000)
+        }
+      }
+      e.preventDefault()
+      e.stopPropagation()
+      return false
     },
     winResize () {
       this.lazy(this.refreshPageSize, 200)
@@ -1243,11 +1309,17 @@ export default {
             if (this.autocompleteInputs.length === 0)
               this.moveNorth()
             else
-            if (this.autocompleteSelect > 0)
+            if (this.autocompleteSelect > 0) {
               this.autocompleteSelect--
+              const showTop = this.autocompleteSelect * 23
+              if (showTop < this.$refs.autocomplete.scrollTop)
+                this.$refs.autocomplete.scrollTop = showTop
+            }
             else
-            if (this.autocompleteSelect === -1)
-              this.autocompleteSelect = this.autocompleteInputs.length - 1
+            if (this.autocompleteSelect === -1) {
+              this.autocompleteSelect = 0
+              // this.autocompleteSelect = this.autocompleteInputs.length - 1
+            }
             break
           case 9:  // Tab
             if (!this.focused) return
@@ -1255,12 +1327,16 @@ export default {
               if (!this.moveWest(e)) {
                 if (this.moveNorth(e))
                   this.moveToEast(e)
+                else
+                  return this.inputBoxBlur()
               }
             }
             else {
               if (!this.moveEast(e)) {
                 if (this.moveSouth(e))
                   this.moveToWest(e)
+                else
+                  return this.inputBoxBlur()
               }
             }
             e.preventDefault()
@@ -1284,7 +1360,15 @@ export default {
             if (this.autocompleteInputs.length === 0)
               this.moveSouth(e)
             else
-              if (this.autocompleteSelect < this.autocompleteInputs.length - 1) this.autocompleteSelect++
+              if (this.autocompleteSelect < this.autocompleteInputs.length - 1) {
+                this.autocompleteSelect++
+                if (this.autocompleteSelect >= 10) {
+                  const showTop = this.autocompleteSelect * 23 - 206
+                  const scrollTop = this.$refs.autocomplete.scrollTop
+                  if (scrollTop < showTop)
+                    this.$refs.autocomplete.scrollTop = showTop
+                }
+              }
             break
           case 13:  // Enter
             if (!this.focused) return
@@ -1303,6 +1387,7 @@ export default {
               this.inputBoxShow = 0
               this.inputBoxChanged = false
             }
+            this.inputBoxComplete()
             break
           case 27:  // Esc
             if (!this.focused) return
@@ -1334,9 +1419,9 @@ export default {
             }
             if (this.currentField.readonly) return
             if (this.autocompleteInputs.length) return
+            this.inputBoxChanged = true
             this.inputBox.value = ''
-            this.inputCellWrite('')
-            // }
+            this.inputBoxComplete()
             break
           default:
             if (!this.focused) return
@@ -1543,7 +1628,7 @@ export default {
               }
         }
         this.value.sort((a, b) => {
-          return sorting(a, b) * n
+          return sorting(a, b) * -n
         })
         this.sortPos = colPos
         this.sortDir = n
@@ -1589,7 +1674,10 @@ export default {
       if (this.$refs.vScrollButton) {
         setTimeout(() => {
           this.$refs.vScrollButton.classList.add('focus')
-          this.lazy(() => this.$refs.vScrollButton.classList.remove('focus'), 1000)
+          this.lazy(() => {
+            if (!this.$refs.vScrollButton) return
+            this.$refs.vScrollButton.classList.remove('focus')
+          }, 1000)
         })
       }
     },
@@ -1600,7 +1688,10 @@ export default {
       if (this.$refs.vScrollButton) {
         setTimeout(() => {
           this.$refs.vScrollButton.classList.add('focus')
-          this.lazy(() => this.$refs.vScrollButton.classList.remove('focus'), 1000)
+          this.lazy(() => {
+            if (!this.$refs.vScrollButton) return
+            this.$refs.vScrollButton.classList.remove('focus')
+          }, 1000)
         })
       }
     },
@@ -1611,7 +1702,10 @@ export default {
       if (this.$refs.vScrollButton) {
         setTimeout(() => {
           this.$refs.vScrollButton.classList.add('focus')
-          this.lazy(() => this.$refs.vScrollButton.classList.remove('focus'), 1000)
+          this.lazy(() => {
+            if (!this.$refs.vScrollButton) return
+            this.$refs.vScrollButton.classList.remove('focus')
+          }, 1000)
         })
       }
     },
@@ -1623,7 +1717,10 @@ export default {
       if (this.$refs.vScrollButton) {
         setTimeout(() => {
           this.$refs.vScrollButton.classList.add('focus')
-          this.lazy(() => this.$refs.vScrollButton.classList.remove('focus'), 1000)
+          this.lazy(() => {
+            if (!this.$refs.vScrollButton) return
+            this.$refs.vScrollButton.classList.remove('focus')
+          }, 1000)
         })
       }
     },
@@ -1658,10 +1755,11 @@ export default {
 
     /* *** Import/Export ************************************************************************************
      */
-    importTable (cb) {
+    importTable (cb, errCb) {
       this.$refs.importFile.click()
       this.importCallback = cb
-    },
+      this.importErrorCallback = errCb
+    },   
     doImport (e) {
       this.processing = true
       // this.refresh()
@@ -1678,26 +1776,35 @@ export default {
             const wb = XLSX.read(data, {type: 'binary', cellDates: true, cellStyle: false})
             const sheet = wb.SheetNames[0]
             let importData = XLSX.utils.sheet_to_row_object_array(wb.Sheets[sheet])
-            importData = importData.map((rec) => {
+            importData = importData.filter(rec => Object.keys(rec).length > 0).map((rec) => {
+              if (rec.key_1) {
+                rec.key = rec.key_1  // Fixed the XLSX issue where key is set to be reserved word
+                delete rec.key_1
+              }
               Object.keys(rec).forEach(k => {
                 if (typeof rec[k] === 'string') rec[k] = rec[k].replace(/[ \r\n\t]+$/g, '')
               })
               return rec
             })
             const keyStart = String(new Date().getTime() % 1e8)
-            if (importData.length === 0) throw new Error('VueExcelEditor: ' + this.localizedLabel.noRecordIsRead)
+            if (importData.length === 0) {
+              if (this.importErrorCallback) this.importErrorCallback('noRecordIsRead')
+              throw new Error('VueExcelEditor: ' + this.localizedLabel.noRecordIsRead)
+            }
             if (this.fields
               .filter(f => f.keyField)
-              .filter(f => typeof importData[0][f.name] === 'undefined' && typeof importData[0][f.label] === 'undefined').length > 0)
-              throw new Error(`VueExcelEditor: ${this.localizedLabel.missingKeyColumn}`)
+              .filter(f => typeof importData[0][f.name] === 'undefined' && typeof importData[0][f.label] === 'undefined').length > 0) {
+                if (this.importErrorCallback) this.importErrorCallback('missingKeyColumn')
+                throw new Error(`VueExcelEditor: ${this.localizedLabel.missingKeyColumn}`)
+              }
 
             let pass = 0
             let inserted = 0
             let updated = 0
             while (pass < 2) {
               const keys = this.fields.filter(f => f.keyField)
+              let uniqueKeys = []
               await Promise.all(importData.map(async (line, i) => {
-
                 let rowPos = -1
                 if (keys.length) {
                   // locate match record
@@ -1706,7 +1813,14 @@ export default {
                       typeof v[f.name] !== 'undefined' 
                       && (v[f.name] === line[f.name] || v[f.name] === line[f.label])).length === keys.length
                   )
-
+                  if (rowPos === -1) {
+                    // If this is a new line, avoid the line with duplicate key
+                    const linekey = keys.map(k => line[k.name] || line[k.label]).join(':')
+                    if (linekey) {
+                      if (uniqueKeys.includes(linekey)) return
+                      uniqueKeys.push(linekey)
+                    }
+                  }
                 }
 
                 // if no match found, find an empty record
@@ -1724,21 +1838,37 @@ export default {
                   if (typeof val === 'undefined') val = line[field.label]
                   if (typeof val === 'undefined') val = null
                   else {
-                    if (field.readonly) throw new Error(`VueExcelEditor: [row=${i+1}] ` + this.localizedLabel.readonlyColumnDetected + ': ' + field.name)
+                    if (field.readonly) {
+                      if (this.importErrorCallback) this.importErrorCallback('readonlyColumnDetected', i+1)
+                      throw new Error(`VueExcelEditor: [row=${i+1}] ` + this.localizedLabel.readonlyColumnDetected + ': ' + field.name)
+                    }
                     if (field.change) {
                       let result = await field.change(val, rec[field.name], rec, field)
-                      if (result === false)
+                      if (result === false) {
+                        if (this.importErrorCallback) this.importErrorCallback('columnHasValidationError', i+1)
                         throw new Error(`VueExcelEditor: [row=${i+1}, val=${val}] ` + this.localizedLabel.columnHasValidationError(field.name, ''))
+                      }
                     }
                     if (field.validate) {
                       let err
-                      if ((err = field.validate(val, rec[field.name], rec, field)))
+                      if ((err = field.validate(val, rec[field.name], rec, field))) {
+                        if (this.importErrorCallback) this.importErrorCallback('columnHasValidationError', i+1, val)
                         throw new Error(`VueExcelEditor: [row=${i+1}, val=${val}] ` + this.localizedLabel.columnHasValidationError(field.name, err))
+                      }
+                    }
+                    if (this.validate) {
+                      let err
+                      if ((err = this.validate(val, rec[field.name], rec, field))) {
+                        if (this.importErrorCallback) this.importErrorCallback('rowHasValidationError', i+1, val)
+                        throw new Error(`VueExcelEditor: [row=${i+1}, val=${val}] ` + this.localizedLabel.rowHasValidationError(i + 1, field.name, err))
+                      }
                     }
                   }
                   if (val !== null) rec[field.name] = val
-                  else if (field.mandatory)
+                  else if (field.mandatory) {
+                    if (this.importErrorCallback) this.importErrorCallback(field.mandatory, i+1, val)
                     throw new Error(`VueExcelEdutor: [row=${i+1}, val=${val}] ` + field.mandatory)
+                  }
                 }))
 
                 // Do actual insert/update if 2nd pass
@@ -1768,6 +1898,7 @@ export default {
             }
           }
           catch (e) {
+            if (this.importErrorCallback) this.importErrorCallback(e.message)
             throw new Error('VueExcelEditor: ' + e.stack)
           }
           finally {
@@ -1778,6 +1909,7 @@ export default {
         fileReader.onerror = (e) => {
           this.processing = false
           this.$refs.importFile.value = ''
+          if (this.importErrorCallback) this.importErrorCallback(e.message)
           throw new Error('VueExcelEditor: ' + e.stack)
         }
         fileReader.readAsBinaryString(file)
@@ -1821,12 +1953,16 @@ export default {
             if (!filename.endsWith('.xlsx')) filename = filename + '.xlsx'
             break
         }
-        XLSX.writeFile(wb, filename, {
-          compression: 'DEFLATE',
-          compressionOptions: {
-            level: 6
-          }
-        })
+        if (filename.endsWith('.xlsx'))
+          XLSX.writeFile(wb, filename, {
+            compression: 'DEFLATE',
+            compressionOptions: {
+              level: 6
+            }
+          })
+        else
+          XLSX.writeFile(wb, filename)
+
         this.processing = false
       }, 500)
     },
@@ -2004,7 +2140,10 @@ export default {
         if (this.$refs.vScrollButton) {
           setTimeout(() => {
             this.$refs.vScrollButton.classList.add('focus')
-            this.lazy(() => this.$refs.vScrollButton.classList.remove('focus'), 1000)
+            this.lazy(() => {
+              if (!this.$refs.vScrollButton) return
+              this.$refs.vScrollButton.classList.remove('focus')
+            }, 1000)
           })
         }
         return done
@@ -2025,7 +2164,10 @@ export default {
         if (this.$refs.vScrollButton) {
           setTimeout(() => {
             this.$refs.vScrollButton.classList.add('focus')
-            this.lazy(() => this.$refs.vScrollButton.classList.remove('focus'), 1000)
+            this.lazy(() => {
+              if (!this.$refs.vScrollButton) return
+              this.$refs.vScrollButton.classList.remove('focus')
+            }, 1000)
           })
         }
         return done
@@ -2040,9 +2182,9 @@ export default {
         const row = e.target.parentNode
         const colPos = Array.from(row.children).indexOf(e.target) - 1
         const rowPos = Array.from(row.parentNode.children).indexOf(row)
-        this.$emit('cellClick', {rowPos, colPos})
+        this.$emit('cell-click', {rowPos, colPos})
         this.moveInputSquare(rowPos, colPos)
-        if (this.currentField.link && e.altKey)
+        if (this.currentField && this.currentField.link && e.altKey)
           setTimeout(() => this.currentField.link(this.currentCell.textContent, this.currentRecord, rowPos, colPos, this.currentField, this))
         if (e.target.offsetWidth - e.offsetX > 15) return
         if (this.currentField.readonly) return
@@ -2065,6 +2207,16 @@ export default {
       if (!cell.classList.contains('error')) return
       if (this.tipTimeout) clearTimeout(this.tipTimeout)
       if ((this.tip = this.errmsg[cell.getAttribute('id')]) === '') return
+      const rect = cell.getBoundingClientRect()
+      this.$refs.tooltip.style.top = (rect.top - 14) + 'px';
+      this.$refs.tooltip.style.left = (rect.right + 8) + 'px'
+      cell.addEventListener('mouseout', this.cellMouseOut)
+    },
+    numcolMouseOver (e) {
+      const cell = e.target
+      if (!cell.classList.contains('error')) return
+      if (this.tipTimeout) clearTimeout(this.tipTimeout)
+      if ((this.tip = this.rowerr[cell.getAttribute('id')]) === '') return
       const rect = cell.getBoundingClientRect()
       this.$refs.tooltip.style.top = (rect.top - 14) + 'px';
       this.$refs.tooltip.style.left = (rect.right + 8) + 'px'
@@ -2096,12 +2248,16 @@ export default {
           // move the whole page down 1 record
           if (this.pageTop + this.pageSize < this.table.length)
             this.pageTop += 1
+          else
+            return false
           row = this.recordBody.children[--rowPos]
         }
         else {
           // move the whole page up 1 record
           if (this.pageTop - 1 >= 0)
             this.pageTop -= 1
+          else
+            return false
           row = this.recordBody.children[++rowPos]
         }
       }
@@ -2146,7 +2302,7 @@ export default {
       this.currentCell = cell
       this.currentRecord = this.table[top + rowPos]
 
-      this.$emit('cellFocus', {rowPos, colPos, cell, record: this.currentRecord})
+      this.$emit('cell-focus', {rowPos, colPos, cell, record: this.currentRecord})
 
       // Off all editors
       if (this.showDatePicker) this.showDatePicker = false
@@ -2205,18 +2361,25 @@ export default {
         this.updateCell(recPos, field, field.toValue(setText))
     },
     inputBoxBlur () {
+      if (!this.$refs.dpContainer) return
       if (this.$refs.dpContainer.querySelector(':hover')) return
+      this.inputBoxComplete()
+      this.focused = false
+      if (this.currentRowPos !== -1 && this.currentRowPos < this.recordBody.children.length) {
+        this.recordBody.children[this.currentRowPos].children[0].classList.remove('focus')
+        this.labelTr.children[this.currentColPos + 1].classList.remove('focus')
+      }
+    },
+    inputBoxComplete () {
       if (this.inputBoxChanged) {
         this.inputCellWrite(this.inputBox.value)
         this.inputBoxChanged = false
       }
       this.inputBoxShow = 0
-      this.focused = false
       this.showDatePicker = false
-      if (this.currentRowPos !== -1 && this.currentRowPos < this.recordBody.children.length) {
-        this.recordBody.children[this.currentRowPos].children[0].classList.remove('focus')
-        this.labelTr.children[this.currentColPos + 1].classList.remove('focus')
-      }
+      // Without this, the cell cannot refresh, dont know why
+      this.focused = false
+      this.focused = true
     },
 
     /* *** Update *******************************************************************************************
@@ -2346,17 +2509,15 @@ export default {
           err: ''
         }
 
-        const id = `id-${row.$id}-${field.name}`
         if (field.validate !== null) transaction.err = field.validate(newVal, oldVal, row, field)
         if (field.mandatory && newVal === '')
           transaction.err += (transaction.err ? '\n' : '') + field.mandatory
+        this.setFieldError(transaction.err, row, field)
 
-        if (transaction.err) {
-          this.errmsg[id] = transaction.err
-          const selector = this.systable.querySelector('td#'+id)
-          if (selector) selector.classList.add('error')
+        if (this.validate !== null) {
+          transaction.rowerr = this.validate(newVal, oldVal, row, field)
+          this.setRowError(transaction.rowerr, row)
         }
-        else delete this.errmsg[id]
 
         if (field.summary)
           this.calSummary(field.name)
@@ -2373,6 +2534,36 @@ export default {
         Object.keys(this.selected).forEach(recPos => this.updateCell(parseInt(recPos), field, content))
         this.processing = false
       }, 0)
+    },
+    setFieldError (error, row, field) {
+      const id = `id-${row.$id}-${field.name}`
+      const selector = this.systable.querySelector('td#'+id)
+      if (error) {
+        this.errmsg[id] = error
+        this.$emit('validate-error', error, row, field)
+        if (selector) selector.classList.add('error')
+      }
+      else
+      if (this.errmsg[id]) {
+        delete this.errmsg[id]
+        this.$emit('validate-error', '', row, field)
+        if (selector) selector.classList.remove('error')
+      }
+    },
+    setRowError (error, row) {
+      const rid = `rid-${row.$id}`
+      const selector = this.systable.querySelector('td#'+rid)
+      if (error) {
+        this.rowerr[rid] = error
+        this.$emit('validate-error', error, row)
+        if (selector) selector.classList.add('error')
+      }
+      else
+      if (this.rowerr[rid]) {
+        delete this.rowerr[rid]
+        this.$emit('validate-error', '', row)
+        if (selector) selector.classList.remove('error')
+      }
     },
 
     /* *** Autocomplete ****************************************************************************************
@@ -2391,34 +2582,42 @@ export default {
           const field = this.currentField
           const name = field.name
           const value = this.inputBox.value.toUpperCase()
-          let list
+          const listCount = this.autocompleteCount
+          let list = []
           if (field.options) {
             if (field.options.constructor.name.endsWith('Function')) {
               list = await field.options(value, this.currentRecord)
               if (field.type === 'map') list = Object.values(list)
-              list.sort().splice(10)
-              this.autocompleteSelect = list.findIndex(element => element.toUpperCase().startsWith(value))
+              else list = list.slice()
+              if (this.inputBoxShow)
+                list = list.filter(element => element.toUpperCase().includes(value))
+              list.sort().splice(listCount)
+              // this.autocompleteSelect = list.findIndex(element => element.toUpperCase().includes(value))
             }
             else if (Object.values(field.options).length > 0) {
               list = field.options
               if (field.type === 'map') list = Object.values(list)
-              list.sort()
-              this.autocompleteSelect = list.findIndex(element => element.toUpperCase().startsWith(value))
+              else list = list.slice()
+              if (this.inputBoxShow)
+                list = list.filter(element => element.toUpperCase().includes(value))
+              list.sort().splice(listCount)
+              // this.autocompleteSelect = list.findIndex(element => element.toUpperCase().includes(value))
             }
           }
           else {
-            list = []
             for(let i=0; i<this.value.length; i++) {
               const rec = this.value[i]
               if (typeof rec[name] !== 'undefined' && rec[name].toString().toUpperCase().startsWith(value) && list.indexOf(rec[name]) === -1)
                 list.push(rec[name])
-              if (list.length >= 10) break
+              if (list.length >= listCount) break
             }
             list.sort()
           }
+          this.autocompleteSelect = list.findIndex(element => element.toUpperCase().includes(value))
           this.autocompleteInputs = list
           const rect = this.currentCell.getBoundingClientRect()
           this.lazy(() => {
+            if (!this.$refs.autocomplete) return
             this.$refs.autocomplete.style.minWidth = rect.width + 'px'
             const r = this.$refs.autocomplete.getBoundingClientRect()
             if (rect.bottom + r.height > window.innerHeight) {
@@ -2434,6 +2633,8 @@ export default {
               this.$refs.autocomplete.style.top = (window.innerWidth - r.width) + 'px'
             else
               this.$refs.autocomplete.style.left = rect.left + 'px'
+            const showTop = this.autocompleteSelect * 23 - 206
+            this.$refs.autocomplete.scrollTop = showTop > 0 ? showTop : 0
           })
           return this.autocompleteSelect
         }
@@ -2445,12 +2646,12 @@ export default {
     },
     inputAutocompleteText (text, e) {
       if (e) e.preventDefault()
+      this.autocompleteInputs = []
+      this.autocompleteSelect = -1
+      this.inputBoxShow = 0
+      this.inputBoxChanged = false
       setTimeout(() => {
         this.inputCellWrite(text)
-        this.autocompleteInputs = []
-        this.autocompleteSelect = -1
-        this.inputBoxShow = 0
-        this.inputBoxChanged = false
       })
     },
 
@@ -2520,9 +2721,11 @@ input:focus, input:active:focus, input.active:focus {
   margin: -1px;
   background-color: lightyellow;
   border: 1px solid rgb(108, 143, 108);
-  height: fit-content;
+  /*height: fit-content;*/
+  overflow-y: scroll;
   font-size: 0.88rem;
   max-width: 300px;
+  max-height: 235px;
 }
 .autocomplete-result {
   list-style: none;
@@ -2620,9 +2823,10 @@ input:focus, input:active:focus, input.active:focus {
   border: 0;
   border-collapse: separate;
   border-spacing: 0;
+  /*
   margin-bottom: -1px;
   border-bottom: 1px solid lightgray;
-  /* margin-left: 40px; */
+  */
 }
 .systable .last-col {
   width: 12px;
@@ -2996,5 +3200,12 @@ a:disabled {
   border-right: 8px solid red;
   left: -8px;
   top: 8px;
+}
+.norecord {
+  z-index: 1;
+  font-size: smaller;
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, 0%);
 }
 </style>

@@ -98,6 +98,7 @@ export default {
   },
   methods: {
     init () {
+      const self = this
       let style = this.initStyle
       let validate = this.validate
       let allowKeys = this.allowKeys
@@ -173,7 +174,10 @@ export default {
 
       if (this.textTransform) style.textTransform = this.textTransform
       if (this.textAlign) style.textAlign = this.textAlign
-      if (this.readonly && this.$parent.readonlyStyle) style = Object.assign(style, this.$parent.readonlyStyle)
+      // if (this.readonly && this.$parent.readonlyStyle) style = Object.assign(style, this.$parent.readonlyStyle)
+
+      this._autocomplete = self.autocomplete
+      this._readonly = self.readonly
 
       this.$parent.registerColumn({
         name: this.field,
@@ -193,10 +197,20 @@ export default {
         lengthLimit: Number(lengthLimit),
         textTransform: this.textTransform,
 
-        autocomplete: this.autocomplete === null ? this.$parent.autocomplete : this.autocomplete,
+        get autocomplete () {
+          return self._autocomplete === null ? self.$parent.autocomplete : self._autocomplete
+        },
+        set autocomplete (val) {
+          self._autocomplete = val
+        },
         initStyle: style,
         invisible: this.invisible,
-        readonly: this.readonly === null ? this.$parent.readonly : this.readonly,
+        get readonly () {
+          return self._readonly === null ? self.$parent.readonly : self._readonly
+        },
+        set readonly (val) {
+          self._readonly = val
+        },
         pos: Number(this.pos),
         options: this.options,
         summary: this.summary,

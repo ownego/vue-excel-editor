@@ -63,7 +63,7 @@ In your template
 
 ## Props List
 
-### Component: vue-excel-editor
+### Prop Component: vue-excel-editor
 
 | Name                  | Mandatory | Type     | Description |
 | :---                  | :---      | :---     | :---        |
@@ -77,6 +77,7 @@ In your template
 | no-finding-next       | Optional  | Boolean  | Disable find-next key (ctrl-g), default is false |
 | free-select           | Optional  | Boolean  | Select multiple rows without pressing ctrl/meta key |
 | autocomplete          | Optional  | Boolean  | Enable autocomplete of all columns, default is false |
+| autocomplete-count    | Optional  | Number   | The maximum length of the autocomplete list, default is 50 |
 | readonly              | Optional  | Boolean  | Set all columns read only, default is false |
 | readonly-style        | Optional  | Object   | The style of the read-only cell |
 | height                | Optional  | String   | Define the exact height in px of the component, default is 'auto' |
@@ -96,8 +97,9 @@ In your template
 | new-if-bottom         | Optional  | Boolean  | New record if focusing cell reach bottom |
 | disable-panel-setting | Optional  | Boolean  | Hide the setting panel |
 | disable-panel-filter  | Optional  | Boolean  | Hide the filter panel |
+| no-mouse-scroll       | Optional  | Boolean  | Disable the vertical scrolling by mouse |
 
-### Component: vue-excel-column
+### Prop Component: vue-excel-column
 
 | Name           | Mandatory | Type              | Description |
 | :---           | :---      | :---              | :---        |
@@ -160,61 +162,67 @@ In your template
 
 ## Events List
 
-### Component: vue-excel-editor
+### Event Component: vue-excel-editor
 
-| Name       | Description |
-| :---       | :---        |
-| update     | Update cell information |
-| delete     | Delete row information |
-| select     | Emit when rows are selected/unselected |
-| cell-click | Emit when a cell be clicked before focus |
-| cell-focus | Emit when a cell got focus |
-| setting    | Emit when setting (column width, invisible state) is changed |
+| Name           | Arguemnts                   | Description |
+| :---           | :---                        | :---        |
+| update         | updateItemArray             | Update cell information |
+| delete         | deleteItemArray             | Delete row information |
+| select         | selectIdArray, direction    | Emit when rows are selected/unselected |
+| cell-click     | rowPos, colPos              | Emit when a cell be clicked before focus |
+| cell-focus     | {rowPos, colPos, cell, rec} | Emit when a cell got focus |
+| page-changed   | pageTopPos, pageBottomPos   | Emit when the page has changed |
+| setting        | setting                     | Emit when setting (column width, invisible state) is changed |
+| validate-error | error, row, field           | Emit when validation (both field and row level) occured |
 
 ## Methods List
 
-### Component: vue-excel-editor
+### Method Component: vue-excel-editor
 
-| Name                  | Arguments  | Description |
-| :---                  | :---       | :---        |
-| firstPage             |            | Move to the first page |
-| lastPage              |            | Move to the last page |
-| prevPage              |            | Move to the previous page |
-| nextPage              |            | Move to the next page |
-| moveNorth             |            | Move the cursor cell to upper cell |
-| moveSouth             |            | Move the cursor cell to lower cell |
-| moveWest              |            | Move the cursor cell to previous cell |
-| moveEast              |            | Move the cursor cell to next cell |
-| moveTo                | row, col*  | Move the cursor cell to cell(row, col) |
-| moveToNorthWest       |            | Move the cursor cell to 1st row 1st col |
-| moveToNorthEast       |            | Move the cursor cell to 1st row last col |
-| moveToSouthWest       |            | Move the cursor cell to last row 1st col |
-| moveToSouthEast       |            | Move the cursor cell to last row last col |
-| doFind                | text       | Find the specified text in whole table and locate the cursor cell |
-| doFindNext            |            | Contnue the last find |
-| sort                  | n, pos     | Sort the column specified by pos, n = 1 (ascending) or -1 (descending) |
-| newRecord             | rec*       | Call this to new an empty record, return the rec pointer |
-| deleteRecord          | rowpos     | Delete the record in pos rowpos |
-| deleteSelectedRecords |            | Delete all the selected records |
-| selectRecord          | row        | Select the row |
-| selectRecordByKeys    | keys       | Select the row by keys hash |
-| selectRecordById      | id         | Select the row by $id |
-| unSelectRecord        | row        | UnSelect the row |
-| clearAllSelected      |            | Unselect all selected rows |
-| getSelectedRecords    |            | Get an array of the selected row hash |
-| exportTable           | fmt*       | Export the filtered table as xlsx/csv |
-| importTable           | callback*  | Import the specified formatted xlsx |
-| undoTransaction       |            | Undo the last update |
-| setFilter             | name, text | Set the filter text on column name |
-| clearFilter           | name*      | Clear the filter text on column name |
-| columnSuppress        |            | Hide the column if all values are null or empty |
-| calSummary            |            | Calculate the summary of all columns |
+| Name                  | Arguments         | Description |
+| :---                  | :---              | :---        |
+| firstPage             |                   | Move to the first page |
+| lastPage              |                   | Move to the last page |
+| prevPage              |                   | Move to the previous page |
+| nextPage              |                   | Move to the next page |
+| moveNorth             |                   | Move the cursor cell to upper cell |
+| moveSouth             |                   | Move the cursor cell to lower cell |
+| moveWest              |                   | Move the cursor cell to previous cell |
+| moveEast              |                   | Move the cursor cell to next cell |
+| moveTo                | row, col*         | Move the cursor cell to cell(row, col) |
+| moveToNorthWest       |                   | Move the cursor cell to 1st row 1st col |
+| moveToNorthEast       |                   | Move the cursor cell to 1st row last col |
+| moveToSouthWest       |                   | Move the cursor cell to last row 1st col |
+| moveToSouthEast       |                   | Move the cursor cell to last row last col |
+| doFind                | text              | Find the specified text in whole table and locate the cursor cell |
+| doFindNext            |                   | Contnue the last find |
+| sort                  | n, pos            | Sort the column specified by pos, n = 1 (ascending) or -1 (descending) |
+| newRecord             | rec*              | Call this to new an empty record, return the rec pointer |
+| deleteRecord          | rowpos            | Delete the record in pos rowpos |
+| deleteSelectedRecords |                   | Delete all the selected records |
+| selectRecord          | row               | Select the row |
+| selectRecordByKeys    | keys              | Select the row by keys hash |
+| selectRecordById      | id                | Select the row by $id |
+| unSelectRecord        | row               | UnSelect the row |
+| clearAllSelected      |                   | Unselect all selected rows |
+| getSelectedRecords    |                   | Get an array of the selected row hash |
+| exportTable           | fmt*              | Export the filtered table as xlsx/csv |
+| importTable           | callback*         | Import the specified formatted xlsx |
+| undoTransaction       |                   | Undo the last update |
+| setFilter             | name, text        | Set the filter text on column name |
+| clearFilter           | name*             | Clear the filter text on column name |
+| columnSuppress        |                   | Hide the column if all values are null or empty |
+| calSummary            |                   | Calculate the summary of all columns |
+| getFieldByName        | name              | Get the field object by name |
+| getFieldByLabel       | label             | Get the field object by label |
+| setRowError           | error, row        | Set the row validation error |
+| setFieldError         | error, row, field | Set the row validation error |
 
 &#42; = optional argument
 
 ## Variable List
 
-#### Component: vue-excel-editor
+### Variable Component: vue-excel-editor
 
 | Name          | Type    | Description |
 | :---          | :---    | :---        |
@@ -232,7 +240,7 @@ In your template
 AOA = Array of Array, i.e. [[...], [...]]  
 AOO = Array of Object, i.e. [{...}, {...}]
 
-I suppose you try to read them only. Do not try to modify any value of the above variables, unless you deeply walk through all the codes and know the consequences.
+I suppose you try to read all the above variables only. Do not try to modify any value of the above variables, unless you deeply walk through the codes and know the consequences.
 
 ## Example
 
@@ -346,7 +354,7 @@ The component will generate the corresponding @delete events. You may also inter
 
 ### Remember the grid setting
 
-The grid setting such as column width can be saved in the localStorage of client browser by specified "remember" prop:
+The grid setting such as column width and column label can be saved in the localStorage of client browser by specified "remember" prop:
 
 ```html
 <template>
@@ -357,6 +365,62 @@ The grid setting such as column width can be saved in the localStorage of client
 ```
 
 You may also capture the @setting event to handle more specifics.
+
+### Change the column label
+
+You may specify the column label in vue-excel-column label prop. However, it will persist after mounted. If you want to change the column label after mounted, you may try to update the variable fields. For example
+
+```js
+    this.$refs.grid.fields.forEach((field) => {
+        if (field.name === 'col23') field.label = 'Product'
+        if (field.label === '') field.label = '(' + field.name + ')'
+    })
+    this.$forceUpdate()  // remember to call vue update to reflesh the display
+```
+
+### Change the column invisibility
+
+Same as column label, you may make the column visible/invisible in vue-excel-column label prop. However, it will persist after mounted. If you want to change it after mounted, you may try to update the variable fields. For example
+
+```js
+    this.$refs.grid.fields.forEach((field) => {
+        if (field.name === 'col23') field.invisible = false
+    })
+    this.$forceUpdate()  // remember to call vue update to reflesh the display
+```
+
+### Export the content
+
+The following provides the button to export the grid content.
+
+```html
+<template>
+    <button @click="exportAsExcel"> Export Excel </button>
+    <button @click="exportAsCsv"> Export CSV </button>
+    <vue-excel-editor ref="grid" ...>
+        ...
+    </vue-excel-editor>
+</template>
+```
+
+```js
+methods: {
+    exportAsExcel () {
+        const format = 'xlsx'
+        const exportSelectedOnly = true
+        const filename = 'test'
+        this.$refs.grid.exportTable(format, exportSelectedOnly, filename)
+    }
+    exportAsCsv () {
+        const format = 'csv'
+        const exportSelectedOnly = true
+        const filename = 'test'
+        this.$refs.grid.exportTable(format, exportSelectedOnly, filename)
+    }
+}
+```
+
+Note that only xlsx format supports compression.
 
 ### Do something when user select/unselect the rows
 
@@ -591,13 +655,15 @@ To gain better performance, I suggest you use paging by not specify "no-paging" 
 
 ### Validation
 
+The following is for column validation.
+
 ```html
 <vue-excel-column field="phone" label="Contact" type="string" width="130px" :validate="validPhoneNum" />
 ```
 
 ```js
 methods: {
-    validPhoneNum (content) {
+    validPhoneNum (content, oldContent, record, field) {
         if (content === '') return 'Mandatory field'
         if (!/^[0-9]{1}-[0-9]{3}-[0-9]{7}$/.test(content)) return 'Invalid Phone Number'
         return '' // return empty string if there is no error
@@ -606,6 +672,36 @@ methods: {
 ```
 
 ![Validation](https://i.imgur.com/VV6RQYw.png "Validation")
+
+The following is for row validation. It will be triggered for any changes. The error message will be shown at number column.
+
+```html
+<vue-excel-editor :validate="validWholeRecord">
+```
+
+```js
+methods: {
+    validWholeRecord (content, oldContent, record, field) {
+        if (record.age !== moment().diff(record.birth, 'years')) return 'The age and birth do not match'
+        return '' // return empty string if there is no error
+    }
+}
+```
+
+You may want to receive the validation error. Component will emit an event "validation-error" if row or field validation error changed.
+
+```html
+<vue-excel-editor @validate-error="logValidationError">
+```
+
+```js
+methods: {
+    logValidationError (error, row, field) {
+        // For row validation, the field argument will be null value
+        console.log(error, row, field)
+    }
+}
+```
 
 ### Summary
 
@@ -713,7 +809,8 @@ data: {
         columnHasValidationError: (name, err) => `Column ${name} has validation error: ${err}`,
         noMatchedColumnName: 'No matched column name',
         invalidInputValue: 'Invalid input value',
-        missingKeyColumn: 'Missing key column'
+        missingKeyColumn: 'Missing key column',
+        noRecordIndicator: 'No record'
     }
 }
 ```
@@ -758,7 +855,8 @@ data: {
         columnHasValidationError: (name, err) => `纪录栏位 ${name} 发生核实错误: ${err}`,
         noMatchedColumnName: '没有能配对之栏位',
         invalidInputValue: '输入错误内容',
-        missingKeyColumn: '找不到关键栏位'
+        missingKeyColumn: '找不到关键栏位',
+        noRecordIndicator: '沒有纪录'
     }
 }
 ```
