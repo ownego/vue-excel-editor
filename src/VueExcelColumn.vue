@@ -91,7 +91,11 @@ export default {
         }
       }
     },
-    register: {type: Function, default: null}
+    register: {type: Function, default: null},
+    html: {
+      type: [Function, String],
+      default: null,
+    },
   },
   created () {
     this.init()
@@ -168,6 +172,8 @@ export default {
           break
         case 'string':
           break
+        case 'html':
+          break
         default:
           throw new Error('VueExcelColumn: Not supported type:' + this.type)
       }
@@ -216,7 +222,8 @@ export default {
         summary: this.summary,
         toValue: this.toValue,
         toText: this.toText,
-        register: this.register
+        register: this.register,
+        html: this.html,
       })
     }
   }
