@@ -92,8 +92,8 @@ export default {
       }
     },
     register: {type: Function, default: null},
-    html: {
-      type: [Function, String],
+    slotName: {
+      type: String,
       default: null,
     },
   },
@@ -172,7 +172,7 @@ export default {
           break
         case 'string':
           break
-        case 'html':
+        case 'custom':
           break
         default:
           throw new Error('VueExcelColumn: Not supported type:' + this.type)
@@ -224,6 +224,7 @@ export default {
         toText: this.toText,
         register: this.register,
         html: this.html,
+        slotName: this.slotName,
       })
     }
   }

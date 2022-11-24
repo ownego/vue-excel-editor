@@ -124,16 +124,12 @@
                     :key="p"
                     @mouseover="cellMouseOver"
                     @mousemove="cellMouseMove">
-                  <template v-if="item.type === 'html'">
-                    <div
-                      v-if="typeof item.html === 'function'"
-                      v-html="item.html(record[item.name])">
-                    </div>
-                    <div
-                      v-else-if="typeof item.html === 'string'"
-                      v-html="item.html">
-                    </div>
-                  </template>
+                  <slot
+                    v-if="item.type === 'custom'"
+                    :name="item.slotName || item.name"
+                    :item="item"
+                    :record="record">
+                  </slot>
                   <template v-else>{{ item.toText(record[item.name]) }}</template>
                 </td>
               </template>
@@ -702,7 +698,7 @@ export default {
         toValue: t => t,
         toText: t => t,
         register: null,
-        html: null,
+        slotName: null,
       }
       if (this.addColumn) colDef = this.addColumn(colDef)
       this.newColumn(colDef, pos)
@@ -747,7 +743,7 @@ export default {
           toValue: t => t,
           toText: t => t,
           register: null,
-          html: null,
+          slotName: null,
         })
       })
     },
