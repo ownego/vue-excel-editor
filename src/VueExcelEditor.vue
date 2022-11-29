@@ -2544,7 +2544,7 @@ export default {
     },
     async updateSelectedRows (field, content) {
       if (this.beforeUpdate) {
-        const result = await this.beforeUpdate(field, content);
+        const result = await this.beforeUpdate(field, content, this.selected);
 
         if (result === false) return;
       }
