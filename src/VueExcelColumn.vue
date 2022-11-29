@@ -223,7 +223,6 @@ export default {
         toValue: this.toValue,
         toText: this.toText,
         register: this.register,
-        html: this.html,
         slotName: this.slotName,
       })
     }
