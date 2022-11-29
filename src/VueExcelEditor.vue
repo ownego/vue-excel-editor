@@ -2365,14 +2365,24 @@ export default {
         this.showDatePickerDiv()
       }
     },
-    inputCellWrite (setText, colPos, recPos) {
+    async inputCellWrite (setText, colPos, recPos) {
       let field = this.currentField
+
       if (typeof colPos !== 'undefined') field = this.fields[colPos]
+
+      const newVal = field.toValue(setText);
+
+      if (this.beforeUpdate) {
+        const result = await this.beforeUpdate(field, newVal, this.selected);
+
+        if (result === false) return;
+      }
+
       if (typeof recPos === 'undefined') recPos = this.pageTop + this.currentRowPos
       if (typeof this.selected[recPos] !== 'undefined')
-        this.updateSelectedRows(field, field.toValue(setText))
+        this.updateSelectedRows(field, newVal)
       else
-        this.updateCell(recPos, field, field.toValue(setText))
+        this.updateCell(recPos, field, newVal)
     },
     inputBoxBlur () {
       if (!this.$refs.dpContainer) return
@@ -2542,13 +2552,7 @@ export default {
         }, 50)
       })
     },
-    async updateSelectedRows (field, content) {
-      if (this.beforeUpdate) {
-        const result = await this.beforeUpdate(field, content, this.selected);
-
-        if (result === false) return;
-      }
-
+    updateSelectedRows (field, content) {
       this.processing = true
       setTimeout(() => {
         Object.keys(this.selected).forEach(recPos => this.updateCell(parseInt(recPos), field, content))
