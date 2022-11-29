@@ -303,7 +303,7 @@ export default {
     'date-picker': DatePicker
   },
   props: {
-      disablePanelSetting: {
+    disablePanelSetting: {
       type: Boolean,
       default() {
         return false;
@@ -405,7 +405,11 @@ export default {
       default () {
         return true
       }
-    }
+    },
+    beforeUpdate: {
+      type: Function,
+      default: null,
+    },
   },
   data () {
     const pageSize = this.noPaging ? 999999 : 20
@@ -2538,7 +2542,13 @@ export default {
         }, 50)
       })
     },
-    updateSelectedRows (field, content) {
+    async updateSelectedRows (field, content) {
+      if (this.beforeUpdate) {
+        const result = await this.beforeUpdate(field, content);
+
+        if (result === false) return;
+      }
+
       this.processing = true
       setTimeout(() => {
         Object.keys(this.selected).forEach(recPos => this.updateCell(parseInt(recPos), field, content))
